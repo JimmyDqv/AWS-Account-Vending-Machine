@@ -1,0 +1,44 @@
+{
+    "accountName": "Test Account",
+    "accountEmail": "awsaccount@example.com",
+    "ouName": "TestAccounts",
+    "iamUser": "iamuser@example.com",
+    "iamPassword": "InitialPassword",
+    "accountRole": "organization-account-role",
+    "adminAccount": "123408753636",
+    "adminAccountRole": "cross-account-admin-role",
+    "cfnTemplates": [
+        {
+            "templateName": "account-iam-user.yaml",
+            "stackName": "avm-owning-iam-user",
+            "parameters": [
+                {
+                    "key": "Username",
+                    "value": "{{iamUser}}"
+                },
+                {
+                    "key": "Password",
+                    "value": "{{iamPassword}}"
+                }
+            ]
+        },
+        {
+            "templateName": "cross-account-admin.yaml",
+            "stackName": "avm-cross-account-admin",
+            "parameters": [
+                {
+                    "key": "RoleName",
+                    "value": "{{adminAccountRole}}"
+                },
+                {
+                    "key": "RequireMFA",
+                    "value": "true"
+                },
+                {
+                    "key": "OtherAccountNumber",
+                    "value": "{{adminAccount}}"
+                }
+            ]
+        }
+    ]
+}

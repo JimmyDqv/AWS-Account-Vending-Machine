@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Creates a cross account role with admin access.
+Parameters:
+  RoleName:
+    Type: String
+    MaxLength: 64
+    MinLength: 1
+    AllowedPattern: "[\\w+=,.@-]+"
+    Description: The name of the role to create
+  ExternalID:
+    Type: String
+    Default: NO_VALUE
+    Description: The External ID that will be required to assume the role.
+  RequireMFA:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    Description: Indicate if MFA need to be present to assume the role.
+  OtherAccountNumber:
+    Type: String
+    MaxLength: 12
+    MinLength: 12
+    AllowedPattern: "[0-9]+"
+    Description: The 12 digit AWS account number to grant access to.
+
+Conditions:
+  ExternalIDSet: !And
+    - !Not [!Equals [!Ref ExternalID, NO_VALUE]]
+    - !Not [!Equals [!Ref ExternalID, ""]]
+  RequireMFASet: !Equals [!Ref RequireMFA, "true"]
+
+Resources:
+  CrossAccountRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Ref RoleName
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+
+        Statement:
+          - Effect: Allow
+            Condition:
+              StringEquals:
+                sts:ExternalId: !If
+                  - ExternalIDSet
+                  - !Ref ExternalID
+                  - !Ref AWS::NoValue
+              Bool:
+                aws:MultiFactorAuthPresent: !If
+                  - RequireMFASet
+                  - !Ref RequireMFA
+                  - !Ref AWS::NoValue
+
+            Principal:
+              AWS: !Sub "arn:aws:iam::${OtherAccountNumber}:root"
+            Action:
+              - sts:AssumeRole
+  AdminPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: master-cross-account-admin
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "*"
+            Resource: "*"
+      Roles:
+        - !Ref CrossAccountRole

@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creates an owner user in the new account
+
+Parameters:
+  Username:
+    Type: String
+    Description: Username for the IAM user
+  Password:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Password for the IAM user
+
+Resources:
+  AccountOwnerIAMUser:
+    Type: "AWS::IAM::User"
+    Properties:
+      UserName: !Ref Username
+      Path: /
+      LoginProfile:
+        Password: !Ref Password
+        PasswordResetRequired: true
+
+  IAMAdminGroup:
+    Type: "AWS::IAM::Group"
+    Properties:
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      GroupName: Admins
+      Path: /
+
+  AssociateUserWithGroup:
+    Type: "AWS::IAM::UserToGroupAddition"
+    Properties:
+      GroupName: !Ref IAMAdminGroup
+      Users:
+        - !Ref AccountOwnerIAMUser

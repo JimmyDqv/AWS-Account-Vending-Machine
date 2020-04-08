@@ -1,0 +1,695 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Account Vending Machine Account Creation Infrastructure
+Transform: "AWS::Serverless-2016-10-31"
+Parameters:
+  EmailSender:
+    Type: String
+    Description: The e-mail address to set as sender when sending information about IAM user via e-mail. This address must be verified by SES.
+  Name:
+    Type: String
+    Description: A unique name that will be appended to resources that have a global unique name, e.g. S3, to avoid collisions.
+
+Resources:
+  # Common IAM Policies
+  CloudWatchLogsPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvCloudWatchPolicy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:*
+            Resource: "arn:aws:logs:*:*:*"
+      Roles:
+        - !Ref AVMCreateOuFunctionRole
+        - !Ref AVMCreateAccountFunctionRole
+        - !Ref AVMGetAccountStatusFunctionRole
+        - !Ref AVMMoveAccountFunctionRole
+        - !Ref AMVSendErrorNotificationFunctionRole
+        - !Ref AMVDeployCloudFormationFunctionRole
+        - !Ref AVMUnsubscribeMarketingFunctionRole
+        - !Ref AVMNotifyAdminsFunctionRole
+        - !Ref AVMNotifyOwnerFunctionRole
+        - !Ref AMVStoreAccountDataFunctionRole
+        - !Ref AVMAccountCreationTriggerFunctionRole
+
+  # Lambda function for creating a new OU.
+  AVMCreateOuFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMCreateOuFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvCreateOu
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - organizations:*
+            Resource: "*"
+      Roles:
+        - !Ref AVMCreateOuFunctionRole
+  AVMCreateOuFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-create-new-organization-unit
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 120
+      CodeUri: ./src
+      Handler: createOU.handler
+      Role: !GetAtt AVMCreateOuFunctionRole.Arn
+
+  # Lambda function fo creating a new account.
+  AVMCreateAccountFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMCreateAccountFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvCreateAccount
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - organizations:*
+            Resource: "*"
+      Roles:
+        - !Ref AVMCreateAccountFunctionRole
+  AVMCreateAccountFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-create-new-account
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 240
+      CodeUri: ./src
+      Handler: createAccount.handler
+      Role: !GetAtt AVMCreateAccountFunctionRole.Arn
+
+  # Lambda function for getting the account creation status
+  AVMGetAccountStatusFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMGetAccountStatusFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvGetAccountStatus
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - organizations:*
+            Resource: "*"
+      Roles:
+        - !Ref AVMGetAccountStatusFunctionRole
+  AVMGetAccountStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-get-account-creation-status
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: getAccountCreateStatus.handler
+      Role: !GetAtt AVMGetAccountStatusFunctionRole.Arn
+
+  # Lambda function for moving account to correct OU
+  AVMMoveAccountFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMMoveAccountFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvMoveAccount
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - organizations:*
+            Resource: "*"
+      Roles:
+        - !Ref AVMMoveAccountFunctionRole
+  AVMMoveAccountFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-move-account
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: moveAccount.handler
+      Role: !GetAtt AVMMoveAccountFunctionRole.Arn
+
+  # Lambda function for for deploying cloudformation.
+  AMVDeployCloudFormationFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AMVDeployCloudFormationFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvDeployCloudFormation
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sts:AssumeRole
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - s3:*
+            Resource: !Sub "arn:aws:s3:::${AMVChildAccountCloudFormationBucket}/*"
+      Roles:
+        - !Ref AMVDeployCloudFormationFunctionRole
+  AMVDeployCloudFormationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-deploy-cloudformation
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 600
+      CodeUri: ./src
+      Handler: deployCloudFormation.handler
+      Role: !GetAtt AMVDeployCloudFormationFunctionRole.Arn
+      Environment:
+        Variables:
+          CLOUDFORMATION_TEMPLATE_BUCKET: !Ref AMVChildAccountCloudFormationBucket
+
+  # Infrastructure for notifying errors
+  # Create SNS topic that Admins Can subscribe to
+  ErrorNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: amv-error-notifications
+  # Lambda function for sending error notifications.
+  AMVSendErrorNotificationFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AMVSendErrorNotificationFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvSendErrorNotification
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:publish
+            Resource: !Ref ErrorNotificationTopic
+      Roles:
+        - !Ref AMVSendErrorNotificationFunctionRole
+  AMVSendErrorNotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-send-error-notification
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: sendErrorNotification.handler
+      Role: !GetAtt AMVSendErrorNotificationFunctionRole.Arn
+      Environment:
+        Variables:
+          ERROR_SNS_TOPIC: !Ref ErrorNotificationTopic
+
+  # Lambda function for unsubscribe from marketing.
+  AVMUnsubscribeMarketingFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMUnsubscribeMarketingFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvUnsubscribeMarketing
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:*
+            Resource: "*"
+      Roles:
+        - !Ref AMVSendErrorNotificationFunctionRole
+  AVMUnsubscribeMarketingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-unsubscribe-marketing-emails
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: unsubscribeMarketing.handler
+      Role: !GetAtt AVMUnsubscribeMarketingFunctionRole.Arn
+
+  # Infrastructure for notifying Admins
+  # Create SNS topic that Admins Can subscribe to
+  AdminNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: amv-admin-notifications
+
+  # Lambda function for notify admins about creation.
+  AVMNotifyAdminsFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMNotifyAdminsFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvNotifyAdmins
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+            Resource: !Ref AdminNotificationTopic
+      Roles:
+        - !Ref AVMNotifyAdminsFunctionRole
+  AVMNotifyAdminsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-notify-admins
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: notifyAdmins.handler
+      Role: !GetAtt AVMNotifyAdminsFunctionRole.Arn
+      Environment:
+        Variables:
+          ADMIN_SNS_TOPIC: !Ref AdminNotificationTopic
+
+  # Lambda function for notify the new account Owner
+  AVMNotifyOwnerFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMNotifyOwnerFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvNotifyOwner
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ses:*
+            Resource: "*"
+      Roles:
+        - !Ref AVMNotifyOwnerFunctionRole
+  AVMNotifyOwnerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-notify-owner
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: notifyOwner.handler
+      Role: !GetAtt AVMNotifyOwnerFunctionRole.Arn
+      Environment:
+        Variables:
+          SENDER: !Ref EmailSender
+
+  # Lambda function for storing the account data
+  AMVStoreAccountDataFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AMVStoreAccountDataFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvStoreAccountData
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:*
+            Resource: !Sub "arn:aws:s3:::${AMVAccountOutputBucket}/*"
+      Roles:
+        - !Ref AMVStoreAccountDataFunctionRole
+  AMVStoreAccountDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-store-account-data
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: storeAccountData.handler
+      Role: !GetAtt AMVStoreAccountDataFunctionRole.Arn
+      Environment:
+        Variables:
+          ACCOUNT_DATA_BUCKET: !Ref AMVAccountOutputBucket
+
+  # Lambda function for triggering the account creation process.
+  AVMAccountCreationTriggerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: amv-s3-create-account-trigger
+      Runtime: python3.6
+      MemorySize: 256
+      Timeout: 30
+      CodeUri: ./src
+      Handler: accountCreationTrigger.handler
+      Role: !GetAtt AVMAccountCreationTriggerFunctionRole.Arn
+      Events:
+        S3Trigger:
+          Type: S3
+          Properties:
+            Bucket: !Ref AMVAccountTriggerBucket
+            Events: s3:ObjectCreated:*
+      Environment:
+        Variables:
+          ACCOUNT_CREATOR_STEPFUNCTION: !Ref AMVStateMachine
+  AVMAccountCreationTriggerFunctionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+  AVMAccountCreationTriggerFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: amvTriggerAccountCreationLambda
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - states:StartExecution
+            Resource: !Ref AMVStateMachine
+          - Effect: Allow
+            Action:
+              - s3:*
+            Resource: !Sub arn:aws:s3:::${AMVAccountTriggerBucket}/*
+      Roles:
+        - !Ref AVMAccountCreationTriggerFunctionRole
+
+  # Account Vending Machine Stepfunction
+  AMVStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      StateMachineName: amv-provision-account
+      RoleArn: !GetAtt AMVStateMachineRole.Arn
+      DefinitionString: !Sub |-
+        {
+          "StartAt": "Create",
+          "States": {
+            "Create": {
+              "Type": "Parallel",
+              "Branches": [
+                {
+                  "StartAt": "CreateOrganizationUnit",
+                  "States": {
+                    "CreateOrganizationUnit": {
+                      "Type": "Task",
+                      "Resource": "${AVMCreateOuFunction.Arn}",
+                      "Next": "CreateAccount"
+                    },
+                    "CreateAccount": {
+                      "Type": "Task",
+                      "Resource": "${AVMCreateAccountFunction.Arn}",
+                      "Next": "WaitForAccountCreation"
+                    },
+                    "WaitForAccountCreation": {
+                      "Type": "Wait",
+                      "Seconds": 180,
+                      "Next": "GetAccountCreationStatus"
+                    },
+                    "GetAccountCreationStatus": {
+                      "Type": "Task",
+                      "Resource": "${AVMGetAccountStatusFunction.Arn}",
+                      "Next": "CheckAccountStatus"
+                    },
+                    "CheckAccountStatus": {
+                      "Type": "Choice",
+                      "Choices": [
+                        {
+                          "Variable": "$.createAccountStatus",
+                          "StringEquals": "IN_PROGRESS",
+                          "Next": "WaitForAccountCreation"
+                        },
+                        {
+                          "Variable": "$.createAccountStatus",
+                          "StringEquals": "FAILED",
+                          "Next": "AccountCreateFailedState"
+                        },
+                        {
+                          "Variable": "$.createAccountStatus",
+                          "StringEquals": "SUCCEEDED",
+                          "Next": "MoveAccount"
+                        }
+                      ],
+                      "Default": "MoveAccount"
+                    },
+                    "MoveAccount": {
+                      "Type": "Task",
+                      "Resource": "${AVMMoveAccountFunction.Arn}",
+                      "Retry": [ {
+                        "ErrorEquals": [ "States.ALL" ],
+                        "IntervalSeconds": 5,
+                        "MaxAttempts": 3,
+                        "BackoffRate": 1.5
+                      } ],
+                      "Next": "DeployCloudFormation"
+                    },
+                    "DeployCloudFormation": {
+                      "Type": "Task",
+                      "Resource": "${AMVDeployCloudFormationFunction.Arn}",
+                      "Retry": [ {
+                        "ErrorEquals": [ "States.ALL" ],
+                        "IntervalSeconds": 10,
+                        "MaxAttempts": 3,
+                        "BackoffRate": 1.5
+                      } ],
+                      "Next": "StoreAccountInformation"
+                    },
+                    "StoreAccountInformation": {
+                      "Type": "Task",
+                      "Resource": "${AMVStoreAccountDataFunction.Arn}",
+                      "End": true
+                    },
+                    "AccountCreateFailedState": {
+                      "Type": "Fail",
+                      "Cause": "Account creation failed."
+                    }
+                  }
+                }
+              ],
+              "Catch": [ {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "NotifyError"
+              } ],
+              "Next": "HandleEmails"
+            },
+            "HandleEmails": {
+              "Type": "Parallel",
+              "Branches": [
+                {
+                  "StartAt": "NotifyAdmins",
+                  "States": {
+                    "NotifyAdmins": {
+                      "Type": "Task",
+                      "Resource": "${AVMNotifyAdminsFunction.Arn}",
+                      "End": true
+                    }
+                  }
+                },
+                {
+                  "StartAt": "NotifyOwner",
+                  "States": {
+                    "NotifyOwner": {
+                      "Type": "Task",
+                      "Resource": "${AVMNotifyOwnerFunction.Arn}",
+                      "End": true
+                    }
+                  }
+                }
+              ],
+              "Catch": [ {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "NotifyError"
+              } ],
+              "End": true
+            },
+            "NotifyError": {
+              "Type": "Task",
+              "Resource": "${AMVSendErrorNotificationFunction.Arn}",
+              "End": true
+            }
+          }
+        }
+  AMVStateMachineRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "states.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: amvCreateAccountStateMachine
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "lambda:*"
+                Resource:
+                  - !GetAtt AVMCreateOuFunction.Arn
+                  - !GetAtt AVMCreateAccountFunction.Arn
+                  - !GetAtt AVMGetAccountStatusFunction.Arn
+                  - !GetAtt AVMMoveAccountFunction.Arn
+                  - !GetAtt AMVDeployCloudFormationFunction.Arn
+                  - !GetAtt AMVSendErrorNotificationFunction.Arn
+                  - !GetAtt AVMUnsubscribeMarketingFunction.Arn
+                  - !GetAtt AVMNotifyAdminsFunction.Arn
+                  - !GetAtt AVMNotifyOwnerFunction.Arn
+                  - !GetAtt AMVStoreAccountDataFunction.Arn
+
+  AMVChildAccountCloudFormationBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub avm-child-accounts-cloudformation-${Name}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  AMVAccountTriggerBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub avm-trigger-new-account-${Name}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  AMVAccountOutputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub avm-created-accounts-${Name}-${AWS::Region}
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  AMVChildAccountCloudFormationBucket:
+    Description: The S3 bucket that will hold the CloudFormation templates to deploy to child accounts.
+    Export:
+      Name: !Sub ${AWS::StackName}:child-cloudformation-bucket
+    Value: !Ref AMVChildAccountCloudFormationBucket
