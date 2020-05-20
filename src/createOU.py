@@ -68,7 +68,7 @@ def get_ou_id_for_name(root_id, ou_name):
     while('NextToken' in response):
         response = client.list_organizational_units_for_parent(
             ParentId=root_id,
-            MaxResults=50,
+            MaxResults=10,
             NextToken=response['NextToken']
         )
         ous = response["OrganizationalUnits"]
