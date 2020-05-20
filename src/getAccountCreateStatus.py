@@ -17,9 +17,10 @@ def main(event):
     account_request_id = event.get("accountRequestId")
     account_status = get_account_creation_status(account_request_id)
     state = account_status["CreateAccountStatus"]["State"]
-    account_id = account_status["CreateAccountStatus"]["AccountId"]
     event["createAccountStatus"] = state
-    event["accountId"] = account_id
+    if "AccountId" in account_status["CreateAccountStatus"]:
+        account_id = account_status["CreateAccountStatus"]["AccountId"]
+        event["accountId"] = account_id
 
     return event
 
